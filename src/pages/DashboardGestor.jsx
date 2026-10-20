@@ -92,10 +92,18 @@ function gerarId() {
   return (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() + Math.random());
 }
 
-function formatarData(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR");
+function formatarData(valor) {
+  if (!valor) return "—";
+  
+  // Se for uma data simples vinda do formulário (AAAA-MM-DD)
+  if (typeof valor === "string" && valor.length === 10 && valor.includes("-")) {
+    const [ano, mes, dia] = valor.split("-");
+    return `${dia}/${mes}/${ano}`;
+  }
+  
+  // Se for um carimbo de tempo completo (como a data de criação do banco)
+  const d = new Date(valor);
+  return isNaN(d.getTime()) ? valor : d.toLocaleDateString("pt-BR");
 }
 
 function formatarMoeda(v) {

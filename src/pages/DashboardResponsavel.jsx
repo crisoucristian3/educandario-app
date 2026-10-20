@@ -257,7 +257,7 @@ export function DashboardResponsavel() {
     if (chegouAoFim) setLeuAteOFim(true);
   }
 
-  // ---------- Confirma a assinatura, carimba IP/Hash, gera o PDF e atualiza o Gestor ----------
+// ---------- Confirma a assinatura, carimba IP/Hash, gera o PDF e atualiza o Gestor ----------
   async function handleConfirmarAssinatura() {
     if (!documentoAssinando || !aceite || !nomeAssinatura.trim() || assinando) return;
     setAssinando(true);
@@ -286,17 +286,19 @@ export function DashboardResponsavel() {
         ip: ipReal,
       };
 
-      // 1) Gera o PDF assinado com o carimbo jurídico, baixa no dispositivo do pai e sobe para o Storage
+      // 1) Gera o PDF assinado e sobe para o Storage.
+      // ATENÇÃO: Passamos FALSE no último parâmetro! Forçar o download automático no 
+      // navegador do WhatsApp no celular trava e cancela a gravação no banco de dados.
       const pdfAssinadoUrl = await gerarEBaixarPdfContrato(
         contratoAtualizado,
         documentoAssinando.nomeTipo,
-        true
+        false 
       );
 
       contratoAtualizado.pdfAssinadoUrl = pdfAssinadoUrl;
 
-      // 2) Atualiza a tabela `contratos` no Supabase (isso faz aparecer como "Assinado" no painel do Gestor na hora)
-      await supabase
+      // 2) Atualiza a tabela contratos no Supabase (Agora lendo o erro!)
+      const { error: erroContrato } = await supabase
         .from("contratos")
         .update({
           status: "assinado",
@@ -305,8 +307,11 @@ export function DashboardResponsavel() {
         })
         .eq("id", documentoAssinando.id);
 
-      // 3) Grava também na tabela de auditoria `assinaturas` (se existir)
-      await supabase.from("assinaturas").insert([
+      // Se o banco recusar, a tela PARA aqui e lança o alerta pro pai
+      if (erroContrato) throw new Error("Erro ao gravar contrato: " + erroContrato.message);
+
+      // 3) Grava também na tabela de auditoria assinaturas
+      const { error: erroAssinatura } = await supabase.from("assinaturas").insert([
         {
           contrato_id: documentoAssinando.id,
           assinado_por: dadosAssinatura.assinadoPor,
@@ -317,15 +322,20 @@ export function DashboardResponsavel() {
         },
       ]);
 
-      // 4) Atualiza a tela do responsável
+      if (erroAssinatura) throw new Error("Erro na auditoria: " + erroAssinatura.message);
+
+      // 4) SÓ ATUALIZA A TELA SE O BANCO DE DADOS DEIXOU SALVAR
       setDocumentos((prev) =>
         prev.map((d) => (d.id === documentoAssinandoId ? contratoAtualizado : d))
       );
 
       fecharDocumento();
+      alert("✅ Contrato assinado com sucesso! Você já pode baixar a 2ª via na sua tela.");
+      
     } catch (err) {
       console.error("Erro ao assinar contrato:", err);
-      alert("Ocorreu um erro ao registrar a assinatura. Tente novamente.");
+      // Agora o pai (e você) verá o motivo exato se der erro
+      alert("Ocorreu um erro de conexão com o banco de dados. Tente assinar novamente.\n\nDetalhe: " + err.message);
     } finally {
       setAssinando(false);
     }
