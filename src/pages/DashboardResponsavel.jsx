@@ -587,16 +587,26 @@ export function DashboardResponsavel() {
               Li e concordo integralmente com os termos deste contrato.
             </label>
 
-            <div style={styles.field}>
-              <label style={styles.label}>Digite seu nome completo como assinatura</label>
+<div style={styles.field}>
+              <label style={styles.label}>
+                Digite seu nome completo como assinatura <span style={{ color: "#C53030" }}>*</span>
+              </label>
               <input
                 type="text"
                 value={nomeAssinatura}
                 onChange={(e) => setNomeAssinatura(e.target.value)}
                 disabled={!aceite}
-                style={styles.input}
+                style={{
+                  ...styles.input,
+                  borderColor: !nomeAssinatura.trim() ? "#C53030" : "#E2E8F0"
+                }}
                 placeholder={sessao.nome}
               />
+              {!nomeAssinatura.trim() && (
+                <p style={{ color: "#C53030", fontSize: "12px", marginTop: "4px", marginBottom: 0 }}>
+                  Obrigatório digitar seu nome para liberar a assinatura.
+                </p>
+              )}
             </div>
 
             {nomeAssinatura.trim() && (
@@ -616,6 +626,7 @@ export function DashboardResponsavel() {
                 style={{
                   ...styles.primaryBtn,
                   opacity: aceite && nomeAssinatura.trim() && !assinando ? 1 : 0.5,
+                  cursor: aceite && nomeAssinatura.trim() && !assinando ? "pointer" : "not-allowed"
                 }}
               >
                 {assinando ? "Registrando e gerando PDF..." : "Confirmar assinatura"}
