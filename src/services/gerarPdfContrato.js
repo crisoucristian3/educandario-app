@@ -43,7 +43,7 @@ Endereço: ${c2.endereco || "—"} | Bairro: ${c2.bairro || "—"} | Cidade: ${c
   }
 
   return `EDUCANDÁRIO CONSTRUTORES DO SABER
-CONTRATO DE PRESTAÇÃO DE SERVIÇOS EDUCACIONAIS 2026
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS EDUCACIONAIS 2027
 ${nomeTipo.toUpperCase()}
 
 ================================================================================
@@ -60,11 +60,11 @@ ${blocoContratante2}
 CONTRATADA: EDUCANDÁRIO CONSTRUTORES DO SABER, Pessoa Jurídica de Direito Privado, CNPJ 39.691.139/0001-64, INEP 21287899, situada na Rua Orfileno Léda, S/N - Centro - Tuntum/MA, CEP 65763-000. As partes qualificadas acima firmam o presente instrumento particular de CONTRATO DE PRESTAÇÃO DE SERVIÇOS EDUCACIONAIS, mediante as cláusulas e condições a seguir expressas:
 
 CLÁUSULA PRIMEIRA - DEFINIÇÕES - VAGAS, MATRÍCULA E REMATRÍCULA
-1.1. Para os fins deste contrato, Aluno refere-se ao estudante identificado; Ano Letivo ao período escolar de 2026; Anuidade ao valor pago pelos Contratantes à Contratada; Dados Pessoais conforme a LGPD (Lei nº 13.709/2018).
+1.1. Para os fins deste contrato, Aluno refere-se ao estudante identificado; Ano Letivo ao período escolar de 2027; Anuidade ao valor pago pelos Contratantes à Contratada; Dados Pessoais conforme a LGPD (Lei nº 13.709/2018).
 1.2. A matrícula e a rematrícula estão condicionadas à existência de vaga na etapa pretendida, observância do Edital de Matrículas vigente, apresentação da documentação exigida, quitação de débitos anteriores e assinatura deste contrato pelos responsáveis.
 
 CLÁUSULA SEGUNDA - DO OBJETO
-2.1. A Contratada compromete-se a ministrar ensino por meio de aulas e demais atividades escolares, seguindo planos de estudo, programas, currículo e calendário conforme legislação vigente (Lei Federal nº 9.394/96) para o ano letivo de 2026.
+2.1. A Contratada compromete-se a ministrar ensino por meio de aulas e demais atividades escolares, seguindo planos de estudo, programas, currículo e calendário conforme legislação vigente (Lei Federal nº 9.394/96) para o ano letivo de 2027.
 2.2. Este contrato não inclui serviços como recuperação, reforço, segunda chamada, dependência, exames especiais, cursos opcionais, segunda via de documentos, transporte escolar, uniforme, merenda e material didático individual (Sistema Conquista Solução Educacional e Projeto Líder em Mim).
 
 CLÁUSULA TERCEIRA - DAS NORMAS INTERNAS E UNIFORME
