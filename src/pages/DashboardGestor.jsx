@@ -7,6 +7,8 @@ import {
   dispararEmailContrato,
   enviarWhatsAppEEmailSimultaneo,
 } from "../services/notificacoes";
+import { gerarEBaixarPdfNotaFiscal } from "../services/gerarPdfNotaFiscal";
+import { LojaGestor } from "../components/LojaGestor";
 
 const BRAND = {
   navy: "#1a1a1a",
@@ -95,13 +97,11 @@ function gerarId() {
 function formatarData(valor) {
   if (!valor) return "—";
   
-  // Se for uma data simples vinda do formulário (AAAA-MM-DD)
   if (typeof valor === "string" && valor.length === 10 && valor.includes("-")) {
     const [ano, mes, dia] = valor.split("-");
     return `${dia}/${mes}/${ano}`;
   }
   
-  // Se for um carimbo de tempo completo (como a data de criação do banco)
   const d = new Date(valor);
   return isNaN(d.getTime()) ? valor : d.toLocaleDateString("pt-BR");
 }
@@ -169,20 +169,22 @@ export function DashboardGestor() {
 
   const handleLogout = () => navigate("/gestor");
 
-  
+  const [notasFiscais, setNotasFiscais] = useState([]);
+  const [modalNotaAberto, setModalNotaAberto] = useState(false);
+  const [clienteNota, setClienteNota] = useState({ nome: "", cpf: "", endereco: "" });
+  const [itensNota, setItensNota] = useState([{ descricao: "", quantidade: 1, valorUnitario: 0 }]);
+  const valorTotalNota = itensNota.reduce((acc, item) => acc + (item.quantidade * item.valorUnitario), 0);
 
-// ---------- Checar Segurança e Carregar dados reais do Supabase ----------
+  // ---------- Checar Segurança e Carregar dados reais do Supabase ----------
   useEffect(() => {
     async function verificarAcessoECarregarDados() {
-      // 1. Checa se tem alguém logado
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        navigate("/gestor"); // Chuta pra tela de login do gestor
+        navigate("/gestor");
         return; 
       }
 
-      // 2. Verifica se a pessoa logada é realmente da Gestão
       const { data: perfil } = await supabase
         .from("perfis")
         .select("role")
@@ -190,11 +192,10 @@ export function DashboardGestor() {
         .single();
 
       if (!perfil || perfil.role !== "gestor") {
-        navigate("/"); // Chuta pra tela do responsável
+        navigate("/");
         return; 
       }
 
-      // 3. Se passou pelas catracas de segurança acima, carrega as tabelas e modelos!
       const { data: tiposDB } = await supabase.from("tipos_contrato").select("*");
       if (tiposDB && tiposDB.length > 0) {
         setTiposContrato(
@@ -216,6 +217,13 @@ export function DashboardGestor() {
       if (contratosDB) {
         setContratos(contratosDB.map(mapearDoBanco));
       }
+
+      const { data: notasDB } = await supabase
+        .from("notas_fiscais")
+        .select("*")
+        .order("criado_em", { ascending: false });
+
+      if (notasDB) setNotasFiscais(notasDB);
     }
 
     verificarAcessoECarregarDados();
@@ -446,6 +454,55 @@ export function DashboardGestor() {
     );
   }
 
+  // --- FUNÇÕES DA NOTA FISCAL ---
+  async function handleGerarNotaFiscal() {
+    if (!clienteNota.nome || !clienteNota.cpf || itensNota.length === 0 || salvando) return;
+    setSalvando(true);
+
+    try {
+      const novaNota = {
+        id: gerarId(),
+        cliente: clienteNota,
+        itens: itensNota,
+        valorTotal: valorTotalNota,
+        criadoEm: new Date().toISOString(),
+      };
+
+      await gerarEBaixarPdfNotaFiscal(novaNota, true);
+
+      const { error } = await supabase.from("notas_fiscais").insert([{
+        id: novaNota.id,
+        cliente: novaNota.cliente,
+        itens: novaNota.itens,
+        valor_total: novaNota.valorTotal,
+        criado_em: novaNota.criadoEm
+      }]);
+
+      if (!error) {
+        setNotasFiscais((prev) => [novaNota, ...prev]);
+        setModalNotaAberto(false);
+        setClienteNota({ nome: "", cpf: "", endereco: "" });
+        setItensNota([{ descricao: "", quantidade: 1, valorUnitario: 0 }]);
+      }
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function adicionarItemNota() {
+    setItensNota([...itensNota, { descricao: "", quantidade: 1, valorUnitario: 0 }]);
+  }
+
+  function removerItemNota(index) {
+    setItensNota(itensNota.filter((_, i) => i !== index));
+  }
+
+  function atualizarItemNota(index, campo, valor) {
+    const novosItens = [...itensNota];
+    novosItens[index][campo] = valor;
+    setItensNota(novosItens);
+  }
+
   const contratoDetalhe = contratos.find((c) => c.id === contratoDetalheId);
   const tipoNome = (tipoId) => tiposContrato.find((t) => t.id === tipoId)?.nome || "—";
 
@@ -476,10 +533,22 @@ export function DashboardGestor() {
             Contratos
           </button>
           <button
+            style={{ ...styles.navItem, ...(paginaAtiva === "notasFiscais" ? styles.navItemActive : {}) }}
+            onClick={() => setPaginaAtiva("notasFiscais")}
+          >
+            Notas Fiscais
+          </button>
+          <button
             style={{ ...styles.navItem, ...(paginaAtiva === "modelos" ? styles.navItemActive : {}) }}
             onClick={() => setPaginaAtiva("modelos")}
           >
             Modelos de Contrato
+          </button>
+          <button
+            style={{ ...styles.navItem, ...(paginaAtiva === "loja" ? styles.navItemActive : {}) }}
+            onClick={() => setPaginaAtiva("loja")}
+          >
+            Loja
           </button>
         </nav>
 
@@ -604,6 +673,65 @@ export function DashboardGestor() {
           </>
         )}
 
+        {/* ---------------- NOTAS FISCAIS ---------------- */}
+        {paginaAtiva === "notasFiscais" && (
+          <>
+            <header style={styles.header}>
+              <div>
+                <h1 style={styles.pageTitle}>Notas Fiscais</h1>
+                <p style={styles.pageSubtitle}>Emita recibos e notas para mensalidades, materiais e livros.</p>
+              </div>
+              <button onClick={() => setModalNotaAberto(true)} style={styles.primaryBtn}>
+                + Emitir Nota / Recibo
+              </button>
+            </header>
+
+            <div style={styles.card}>
+              <h3 style={styles.cardTitle}>Histórico de Emissões</h3>
+              {notasFiscais.length === 0 ? (
+                <p style={{ color: "#6B7280" }}>Nenhuma nota fiscal emitida ainda.</p>
+              ) : (
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Data</th>
+                      <th style={styles.th}>Cliente (Tomador)</th>
+                      <th style={styles.th}>Nº Controle</th>
+                      <th style={styles.th}>Valor Total</th>
+                      <th style={styles.th}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {notasFiscais.map((nota) => (
+                      <tr key={nota.id} style={styles.tr}>
+                        <td style={styles.td}>{formatarData(nota.criado_em || nota.criadoEm)}</td>
+                        <td style={styles.td}>{nota.cliente.nome}</td>
+                        <td style={styles.td}>{nota.id.slice(0,8).toUpperCase()}</td>
+                        <td style={styles.td}>{formatarMoeda(nota.valor_total || nota.valorTotal)}</td>
+                        <td style={styles.td}>
+                          <button 
+                            onClick={() => gerarEBaixarPdfNotaFiscal({
+                              ...nota, 
+                              criadoEm: nota.criado_em || nota.criadoEm, 
+                              valorTotal: nota.valor_total || nota.valorTotal
+                            }, true)} 
+                            style={styles.actionBtn}
+                          >
+                            Baixar PDF
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ---------------- LOJA / CATÁLOGO ---------------- */}
+        {paginaAtiva === "loja" && <LojaGestor />}
+
         {/* ---------------- MODELOS DE CONTRATO ---------------- */}
         {paginaAtiva === "modelos" && (
           <>
@@ -653,6 +781,78 @@ export function DashboardGestor() {
           </>
         )}
       </main>
+
+      {/* ---------------- MODAL NOVA NOTA FISCAL ---------------- */}
+      {modalNotaAberto && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContentGrande}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.cardTitle}>Emitir Nova Nota / Recibo</h3>
+              <button onClick={() => setModalNotaAberto(false)} style={styles.closeBtn}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <h4 style={styles.subTitulo}>Dados do Cliente</h4>
+              <div style={styles.formGrid}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={styles.label}>Nome ou Razão Social *</label>
+                  <input type="text" value={clienteNota.nome} onChange={(e) => setClienteNota({...clienteNota, nome: e.target.value})} style={styles.inputModal} />
+                </div>
+                <div>
+                  <label style={styles.label}>CPF / CNPJ *</label>
+                  <input type="text" value={clienteNota.cpf} onChange={(e) => setClienteNota({...clienteNota, cpf: e.target.value})} style={styles.inputModal} />
+                </div>
+                <div>
+                  <label style={styles.label}>Endereço (opcional)</label>
+                  <input type="text" value={clienteNota.endereco} onChange={(e) => setClienteNota({...clienteNota, endereco: e.target.value})} style={styles.inputModal} />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h4 style={styles.subTitulo}>Itens da Nota</h4>
+                <button onClick={adicionarItemNota} style={styles.linkBtn}>+ Adicionar item</button>
+              </div>
+              
+              {itensNota.map((item, index) => (
+                <div key={index} style={{ display: "flex", gap: "12px", marginBottom: "12px", alignItems: "flex-end" }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={styles.label}>Descrição</label>
+                    <input type="text" value={item.descricao} onChange={(e) => atualizarItemNota(index, "descricao", e.target.value)} style={styles.inputModal} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={styles.label}>Qtd.</label>
+                    <input type="number" min="1" value={item.quantidade} onChange={(e) => atualizarItemNota(index, "quantidade", Number(e.target.value))} style={styles.inputModal} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={styles.label}>Valor Unit. (R$)</label>
+                    <input type="number" step="0.01" value={item.valorUnitario} onChange={(e) => atualizarItemNota(index, "valorUnitario", Number(e.target.value))} style={styles.inputModal} />
+                  </div>
+                  {itensNota.length > 1 && (
+                    <button onClick={() => removerItemNota(index)} style={{ ...styles.dangerBtn, padding: "10px" }}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: "16px", background: BRAND.mist, borderRadius: "8px", textAlign: "right" }}>
+              <strong>Total da Nota: {formatarMoeda(valorTotalNota)}</strong>
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "24px" }}>
+              <button onClick={() => setModalNotaAberto(false)} style={styles.secondaryBtn}>Cancelar</button>
+              <button 
+                onClick={handleGerarNotaFiscal} 
+                disabled={!clienteNota.nome || !clienteNota.cpf || salvando}
+                style={{ ...styles.primaryBtn, opacity: (!clienteNota.nome || !clienteNota.cpf || salvando) ? 0.5 : 1 }}
+              >
+                {salvando ? "Gerando PDF..." : "Gerar e Baixar Nota"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ---------------- MODAL: NOVO CONTRATO / EDIÇÃO ---------------- */}
       {modalAberto && (
@@ -725,7 +925,7 @@ export function DashboardGestor() {
 
                 <div style={styles.formGrid}>
                   <div style={styles.field}>
-                    <label style={styles.label}>Prazo para assinatura (dias a partir de hoje)</label>
+                    <label style={styles.label}>Prazo para assinatura (dias)</label>
                     <input
                       type="number"
                       value={prazoDias}
@@ -734,7 +934,7 @@ export function DashboardGestor() {
                     />
                   </div>
                   <div style={styles.field}>
-                    <label style={styles.label}>Nome do Representante (Assinatura pela Escola)</label>
+                    <label style={styles.label}>Nome do Representante (Escola)</label>
                     <input
                       type="text"
                       value={representanteEscola}
@@ -762,7 +962,7 @@ export function DashboardGestor() {
                         ? "Gerando PDF..."
                         : contratoEditandoId
                         ? "Salvar e Baixar PDF"
-                        : "Gerar Contrato (PDF)"}
+                        : "Gerar Contrato"}
                     </button>
                   </div>
                 </div>
@@ -861,8 +1061,6 @@ export function DashboardGestor() {
     </div>
   );
 }
-
-// ---------- subcomponentes ----------
 
 function SecaoFormulario({ titulo, campos, valores, onChange }) {
   return (

@@ -4,6 +4,9 @@ import { supabase } from "../services/supabase";
 import { gerarEBaixarPdfContrato, montarTextoContrato } from "../services/gerarPdfContrato";
 import { dispararEmailContrato } from "../services/notificacoes";
 
+// IMPORT DA NOVA LOJA
+import { LojaResponsavel } from "../components/LojaResponsavel";
+
 const BRAND = {
   navy: "#1a1a1a",
   navyDeep: "#0a0a0a",
@@ -25,7 +28,6 @@ const fontImport = `
   @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Dancing+Script:wght@600&display=swap');
 `;
 
-// Gera um Hash SHA-256 real do texto do contrato + dados da assinatura
 async function gerarHashDocumento(texto) {
   const encoder = new TextEncoder();
   const data = encoder.encode(texto);
@@ -34,7 +36,6 @@ async function gerarHashDocumento(texto) {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// Captura o IP público real da internet do responsável
 async function obterIpPublico() {
   try {
     const resp = await fetch("https://api.ipify.org?format=json");
@@ -88,27 +89,26 @@ function mapearContratoDoBanco(row) {
 
 export function DashboardResponsavel() {
   const navigate = useNavigate();
-  const { token } = useParams(); // Se o pai veio pelo link do WhatsApp (/assinar/:token)
+  const { token } = useParams();
 
-  // ---------- sessão ----------
-  const [sessao, setSessao] = useState(null); // null = deslogado; senão { id, nome, email }
-  const [modoAuth, setModoAuth] = useState("login"); // "login" | "cadastro"
+  const [sessao, setSessao] = useState(null);
+  const [modoAuth, setModoAuth] = useState("login");
   const [erroAuth, setErroAuth] = useState("");
   const [carregandoAuth, setCarregandoAuth] = useState(false);
   const [formAuth, setFormAuth] = useState({ nome: "", email: "", senha: "", confirmarSenha: "" });
 
-  // ---------- documentos ----------
+  // NOVO: ABA ATIVA
+  const [abaAtiva, setAbaAtiva] = useState("contratos"); // "contratos" | "loja"
+
   const [documentos, setDocumentos] = useState([]);
   const [carregandoDocs, setCarregandoDocs] = useState(false);
 
-  // ---------- modal de leitura e assinatura ----------
   const [documentoAssinandoId, setDocumentoAssinandoId] = useState(null);
   const [leuAteOFim, setLeuAteOFim] = useState(false);
   const [aceite, setAceite] = useState(false);
   const [nomeAssinatura, setNomeAssinatura] = useState("");
   const [assinando, setAssinando] = useState(false);
 
-  // Se o pai abriu pelo link do WhatsApp (/assinar/TOKEN), já preenche o e-mail e o nome dele na tela de login
   useEffect(() => {
     async function verificarTokenLink() {
       if (!token) return;
@@ -129,7 +129,6 @@ export function DashboardResponsavel() {
     verificarTokenLink();
   }, [token]);
 
-  // Busca todos os contratos do responsável logado (pelo e-mail ou pelo token do link)
   async function carregarContratosDoResponsavel(emailUsuario) {
     setCarregandoDocs(true);
     try {
@@ -162,7 +161,6 @@ export function DashboardResponsavel() {
     setDocumentos([]);
   }
 
-  // ---------- autenticação integrada ao Supabase ----------
   async function handleSubmitAuth(e) {
     e.preventDefault();
     setErroAuth("");
@@ -219,8 +217,6 @@ export function DashboardResponsavel() {
           password: senhaLimpa,
         });
 
-        // Se o e-mail de confirmação estiver ativado no Supabase ou for teste local,
-        // buscamos o nome no contrato correspondente para não travar o pai
         if (error && error.message.includes("Invalid login credentials")) {
           setErroAuth("E-mail ou senha incorretos. Se for seu primeiro acesso, clique na aba 'Primeiro acesso'.");
           return;
@@ -239,7 +235,6 @@ export function DashboardResponsavel() {
     }
   }
 
-  // ---------- assinatura ----------
   function abrirDocumento(id) {
     setDocumentoAssinandoId(id);
     setLeuAteOFim(false);
@@ -257,7 +252,6 @@ export function DashboardResponsavel() {
     if (chegouAoFim) setLeuAteOFim(true);
   }
 
-// ---------- Confirma a assinatura, carimba IP/Hash, gera o PDF e atualiza o Gestor ----------
   async function handleConfirmarAssinatura() {
     if (!documentoAssinando || !aceite || !nomeAssinatura.trim() || assinando) return;
     setAssinando(true);
@@ -286,9 +280,6 @@ export function DashboardResponsavel() {
         ip: ipReal,
       };
 
-      // 1) Gera o PDF assinado e sobe para o Storage.
-      // ATENÇÃO: Passamos FALSE no último parâmetro! Forçar o download automático no 
-      // navegador do WhatsApp no celular trava e cancela a gravação no banco de dados.
       const pdfAssinadoUrl = await gerarEBaixarPdfContrato(
         contratoAtualizado,
         documentoAssinando.nomeTipo,
@@ -297,7 +288,6 @@ export function DashboardResponsavel() {
 
       contratoAtualizado.pdfAssinadoUrl = pdfAssinadoUrl;
 
-      // 2) Atualiza a tabela contratos no Supabase (Agora lendo o erro!)
       const { error: erroContrato } = await supabase
         .from("contratos")
         .update({
@@ -307,10 +297,8 @@ export function DashboardResponsavel() {
         })
         .eq("id", documentoAssinando.id);
 
-      // Se o banco recusar, a tela PARA aqui e lança o alerta pro pai
       if (erroContrato) throw new Error("Erro ao gravar contrato: " + erroContrato.message);
 
-      // 3) Grava também na tabela de auditoria assinaturas
       const { error: erroAssinatura } = await supabase.from("assinaturas").insert([
         {
           contrato_id: documentoAssinando.id,
@@ -324,7 +312,6 @@ export function DashboardResponsavel() {
 
       if (erroAssinatura) throw new Error("Erro na auditoria: " + erroAssinatura.message);
 
-      // 4) SÓ ATUALIZA A TELA SE O BANCO DE DADOS DEIXOU SALVAR
       setDocumentos((prev) =>
         prev.map((d) => (d.id === documentoAssinandoId ? contratoAtualizado : d))
       );
@@ -334,7 +321,6 @@ export function DashboardResponsavel() {
       
     } catch (err) {
       console.error("Erro ao assinar contrato:", err);
-      // Agora o pai (e você) verá o motivo exato se der erro
       alert("Ocorreu um erro de conexão com o banco de dados. Tente assinar novamente.\n\nDetalhe: " + err.message);
     } finally {
       setAssinando(false);
@@ -471,6 +457,22 @@ export function DashboardResponsavel() {
             </div>
             <h1 style={styles.navTitle}>Educandário Construtores do Saber</h1>
           </div>
+
+          <div style={{ display: "flex", gap: "16px" }}>
+            <button 
+              onClick={() => setAbaAtiva("contratos")} 
+              style={{ ...styles.topTab, ...(abaAtiva === "contratos" ? styles.topTabActive : {}) }}
+            >
+              Meus Contratos
+            </button>
+            <button 
+              onClick={() => setAbaAtiva("loja")} 
+              style={{ ...styles.topTab, ...(abaAtiva === "loja" ? styles.topTabActive : {}) }}
+            >
+              Loja de Materiais
+            </button>
+          </div>
+
           <div style={styles.userMenu}>
             <span style={styles.userName}>Olá, {sessao.nome}</span>
             <button onClick={handleLogout} style={styles.logoutBtn}>Sair</button>
@@ -480,74 +482,88 @@ export function DashboardResponsavel() {
 
       <main style={styles.main}>
         <div style={styles.contentWrapper}>
-          <div style={styles.headerSection}>
-            <h2 style={styles.pageTitle}>Área do Responsável</h2>
-            <p style={styles.pageSubtitle}>Gerencie as matrículas e contratos dos seus dependentes.</p>
-          </div>
-
-          {docsPendentes.length > 0 && (
-            <div style={styles.alertCard}>
-              <div style={styles.alertIcon}>!</div>
-              <div style={styles.alertText}>
-                <h3 style={styles.alertTitle}>Assinatura pendente</h3>
-                <p style={styles.alertDesc}>
-                  Você possui {docsPendentes.length} documento(s) aguardando sua assinatura.
-                </p>
+          
+          {/* ----- ABA DE CONTRATOS ----- */}
+          {abaAtiva === "contratos" && (
+            <>
+              <div style={styles.headerSection}>
+                <h2 style={styles.pageTitle}>Área do Responsável</h2>
+                <p style={styles.pageSubtitle}>Gerencie as matrículas e contratos dos seus dependentes.</p>
               </div>
+
+              {docsPendentes.length > 0 && (
+                <div style={styles.alertCard}>
+                  <div style={styles.alertIcon}>!</div>
+                  <div style={styles.alertText}>
+                    <h3 style={styles.alertTitle}>Assinatura pendente</h3>
+                    <p style={styles.alertDesc}>
+                      Você possui {docsPendentes.length} documento(s) aguardando sua assinatura.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div style={styles.card}>
+                <h3 style={styles.cardTitle}>Meus documentos</h3>
+                <div style={styles.documentList}>
+                  {carregandoDocs ? (
+                    <p style={{ color: "#6B7280" }}>Carregando seus contratos...</p>
+                  ) : documentos.length === 0 ? (
+                    <p style={{ color: "#6B7280" }}>
+                      Nenhum contrato encontrado para o e-mail <strong>{sessao.email}</strong>.
+                    </p>
+                  ) : (
+                    documentos.map((doc) => (
+                      <div key={doc.id} style={styles.documentItem}>
+                        <div style={styles.docInfo}>
+                          <div style={styles.docHeader}>
+                            <strong style={styles.docTitle}>{doc.titulo}</strong>
+                            {doc.status === "pendente" ? (
+                              <span style={styles.badgeWarning}>Aguardando assinatura</span>
+                            ) : (
+                              <span style={styles.badgeSuccess}>Assinado e válido</span>
+                            )}
+                          </div>
+                          <span style={styles.docStudent}>Aluno: {doc.alunoNome}</span>
+                          {doc.dataAssinatura && (
+                            <span style={styles.docDate}>
+                              Assinado em {doc.dataAssinatura} — IP {doc.ip}
+                            </span>
+                          )}
+                        </div>
+
+                        {doc.status === "pendente" ? (
+                          <button
+                            onClick={() => abrirDocumento(doc.id)}
+                            style={{ ...styles.secondaryBtn, color: BRAND.verde, borderColor: BRAND.verde }}
+                          >
+                            Ler e assinar
+                          </button>
+                        ) : (
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <button onClick={() => baixarPDF(doc)} style={styles.secondaryBtn}>
+                              Baixar PDF (2ª via)
+                            </button>
+                            <button onClick={() => enviarCopiaPorEmail(doc)} style={styles.secondaryBtn}>
+                              Enviar por e-mail
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ----- ABA DA LOJA ----- */}
+          {abaAtiva === "loja" && (
+            <div style={{ marginTop: "12px" }}>
+              <LojaResponsavel sessao={sessao} />
             </div>
           )}
 
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>Meus documentos</h3>
-            <div style={styles.documentList}>
-              {carregandoDocs ? (
-                <p style={{ color: "#6B7280" }}>Carregando seus contratos...</p>
-              ) : documentos.length === 0 ? (
-                <p style={{ color: "#6B7280" }}>
-                  Nenhum contrato encontrado para o e-mail <strong>{sessao.email}</strong>.
-                </p>
-              ) : (
-                documentos.map((doc) => (
-                  <div key={doc.id} style={styles.documentItem}>
-                    <div style={styles.docInfo}>
-                      <div style={styles.docHeader}>
-                        <strong style={styles.docTitle}>{doc.titulo}</strong>
-                        {doc.status === "pendente" ? (
-                          <span style={styles.badgeWarning}>Aguardando assinatura</span>
-                        ) : (
-                          <span style={styles.badgeSuccess}>Assinado e válido</span>
-                        )}
-                      </div>
-                      <span style={styles.docStudent}>Aluno: {doc.alunoNome}</span>
-                      {doc.dataAssinatura && (
-                        <span style={styles.docDate}>
-                          Assinado em {doc.dataAssinatura} — IP {doc.ip}
-                        </span>
-                      )}
-                    </div>
-
-                    {doc.status === "pendente" ? (
-                      <button
-                        onClick={() => abrirDocumento(doc.id)}
-                        style={{ ...styles.secondaryBtn, color: BRAND.verde, borderColor: BRAND.verde }}
-                      >
-                        Ler e assinar
-                      </button>
-                    ) : (
-                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                        <button onClick={() => baixarPDF(doc)} style={styles.secondaryBtn}>
-                          Baixar PDF (2ª via)
-                        </button>
-                        <button onClick={() => enviarCopiaPorEmail(doc)} style={styles.secondaryBtn}>
-                          Enviar por e-mail
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
         </div>
       </main>
 
@@ -587,7 +603,7 @@ export function DashboardResponsavel() {
               Li e concordo integralmente com os termos deste contrato.
             </label>
 
-<div style={styles.field}>
+            <div style={styles.field}>
               <label style={styles.label}>
                 Digite seu nome completo como assinatura <span style={{ color: "#C53030" }}>*</span>
               </label>
@@ -658,7 +674,7 @@ const styles = {
   container: { minHeight: "100vh", width: "100%", fontFamily: "'Manrope', system-ui, sans-serif", background: BRAND.mist, display: "flex", flexDirection: "column" },
   colorBar: { display: "flex", height: "5px", width: "100%" },
   navbar: { background: BRAND.paper, padding: "16px 24px", color: BRAND.navy, borderBottom: `1px solid ${BRAND.line}` },
-  navContent: { maxWidth: "1000px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  navContent: { maxWidth: "1200px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" },
   brandGroup: { display: "flex", alignItems: "center", gap: "12px" },
   brandMark: { display: "flex", gap: "6px" },
   dot: { width: "10px", height: "10px", borderRadius: "50%", display: "inline-block" },
@@ -666,8 +682,13 @@ const styles = {
   userMenu: { display: "flex", alignItems: "center", gap: "24px" },
   userName: { fontSize: "14px", fontWeight: 600 },
   logoutBtn: { background: "transparent", border: `1px solid ${BRAND.line}`, color: BRAND.ink, padding: "8px 16px", borderRadius: "6px", fontSize: "13px", fontWeight: 600, cursor: "pointer" },
+  
+  // ABAS DO TOP NAVBAR
+  topTab: { background: "transparent", border: "none", color: BRAND.cinza, fontWeight: 700, fontSize: "15px", cursor: "pointer", padding: "8px 16px", borderRadius: "8px" },
+  topTabActive: { background: BRAND.mist, color: BRAND.navy },
+
   main: { flex: 1, padding: "32px 24px" },
-  contentWrapper: { maxWidth: "1000px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" },
+  contentWrapper: { maxWidth: "1200px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" },
   headerSection: { marginBottom: "8px" },
   pageTitle: { margin: "0 0 8px 0", fontSize: "26px", fontWeight: 800, color: BRAND.navy },
   pageSubtitle: { margin: 0, fontSize: "15px", color: "#6B7280" },
