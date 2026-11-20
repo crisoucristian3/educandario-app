@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
 
 const BRAND = { verde: "#008000", navy: "#1a1a1a", paper: "#FFFFFF", line: "#E2E8F0", mist: "#F8F9FA", cinza: "#718096" };
+const CHAVE_PIX = "6106aeee-9bab-4d1f-8c07-ae1a712f03a8";
 
 function formatarMoeda(v) {
   return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -22,6 +23,7 @@ export function LojaResponsavel({ sessao }) {
   const [modalCheckout, setModalCheckout] = useState(false);
   const [arquivoPix, setArquivoPix] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  const [chaveCopiada, setChaveCopiada] = useState(false);
 
   // Dados do aluno associado
   const [nomeAluno, setNomeAluno] = useState("");
@@ -47,6 +49,12 @@ export function LojaResponsavel({ sessao }) {
       .order("criado_em", { ascending: false });
     
     if (data) setMeusPedidos(data);
+  }
+
+  function copiarChavePix() {
+    navigator.clipboard.writeText(CHAVE_PIX);
+    setChaveCopiada(true);
+    setTimeout(() => setChaveCopiada(false), 2500);
   }
 
   function adicionarAoCarrinho(produto) {
@@ -248,14 +256,23 @@ export function LojaResponsavel({ sessao }) {
             
             <div style={{ background: "#F0FFF4", border: "1px solid #008000", padding: "16px", borderRadius: "8px", marginBottom: "20px", textAlign: "center" }}>
               <h4 style={{ margin: "0 0 8px 0", color: "#008000" }}>Pague via Pix</h4>
-              <p style={{ margin: "0 0 12px 0", fontSize: "14px" }}>Transfira <strong>{formatarMoeda(valorTotalCarrinho)}</strong> para a chave abaixo:</p>
-              <div style={{ background: "#FFF", padding: "10px", borderRadius: "6px", fontWeight: "bold", border: "1px dashed #008000" }}>
-                CNPJ: 39.691.139/0001-64<br/>
-                <span style={{ fontSize: "12px", color: BRAND.cinza, fontWeight: "normal" }}>Educandário Construtores do Saber</span>
+              <p style={{ margin: "0 0 12px 0", fontSize: "14px" }}>Transfira <strong>{formatarMoeda(valorTotalCarrinho)}</strong> para a chave aleatória abaixo:</p>
+              <div style={{ background: "#FFF", padding: "10px", borderRadius: "6px", fontWeight: "bold", border: "1px dashed #008000", fontSize: "13px", wordBreak: "break-all" }}>
+                {CHAVE_PIX}
+                <div style={{ fontSize: "12px", color: BRAND.cinza, fontWeight: "normal", marginTop: "4px" }}>
+                  Educandário Construtores do Saber
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={copiarChavePix}
+                style={styles.btnCopiar}
+              >
+                {chaveCopiada ? "✓ Chave copiada!" : "Copiar chave Pix"}
+              </button>
             </div>
 
-            <label style={styles.label}>Nome Completo do Aluno *</label>
+            <label style={styles.label}>Nome Completo *</label>
             <input type="text" value={nomeAluno} onChange={e => setNomeAluno(e.target.value)} style={styles.input} placeholder="Para identificarmos a entrega" />
 
             <label style={styles.label}>Seu Telefone / WhatsApp *</label>
@@ -281,6 +298,7 @@ const styles = {
   btnAdd: { background: BRAND.verde, color: BRAND.paper, border: "none", borderRadius: "50%", width: "32px", height: "32px", fontSize: "18px", fontWeight: "bold", cursor: "pointer" },
   btnQtd: { background: BRAND.mist, border: `1px solid ${BRAND.line}`, borderRadius: "4px", width: "24px", height: "24px", cursor: "pointer", fontWeight: "bold" },
   btnFinalizar: { background: BRAND.verde, color: BRAND.paper, padding: "12px", border: "none", borderRadius: "8px", fontWeight: 800, fontSize: "15px", cursor: "pointer" },
+  btnCopiar: { marginTop: "10px", background: BRAND.paper, color: BRAND.verde, border: `1px solid ${BRAND.verde}`, padding: "8px 14px", borderRadius: "6px", fontSize: "13px", fontWeight: 700, cursor: "pointer", width: "100%" },
   modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
   modalContent: { backgroundColor: BRAND.paper, padding: "32px", borderRadius: "12px", width: "420px", maxWidth: "95%" },
   label: { display: "block", fontSize: "13px", fontWeight: 600, color: BRAND.navy, marginBottom: "4px", marginTop: "12px" },

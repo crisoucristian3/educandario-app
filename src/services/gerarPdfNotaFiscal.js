@@ -4,8 +4,8 @@ import { jsPDF } from "jspdf";
 // DADOS FIXOS DO EMISSOR (mudam raramente: edite só aqui)
 // ============================================================
 const EMISSOR = {
-  nome: "EDUCANDÁRIO CONSTRUTORES DO SABER",
-  cnpj: "39.691.139/0001-64",
+  nome: "ESPACO EVOLUIR",
+  cnpj: "58.471.222/0001-72",
   endereco: "Rua Orfileno Léda, S/N - Centro",
   cidadeUf: "Tuntum/MA",
   cep: "",        // ex.: "65763-000"
